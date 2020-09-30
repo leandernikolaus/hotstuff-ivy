@@ -3,6 +3,7 @@ Proving the HotStuff BFT protocol using the ivy language and tool
 
 This repository contains a proof of safety for a high-level model of the chained [HotStuff BFT protocol](https://arxiv.org/abs/1803.05069).
 The protocol is modelled using the [ivy](http://microsoft.github.io/ivy/) language and tool.
+The model is based on a description of the HotStuff protocol I created for my blockchain technology course, available [here](https://ux.uis.no/~ljehl/pdf/hotStuffExplained.pdf).
 
 Different from classical consensus protocolls, chained HotStuff decides on branches in a tree, rather than values.
 The repository contains the following files:
