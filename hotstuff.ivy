@@ -48,8 +48,7 @@ definition certified(B) = B=genesis | exists Q. forall N. member(N,Q) -> voted(N
 after init {
     prev(B,C) := false;
     prev(genesis,genesis) := true;
-    proposed(B) := false;
-    proposed(genesis) := true;
+    proposed(B) := B = genesis;
     block_height(B) := min;
     ancestor(B,C) := B = C;
     voted(N,B) := false;
@@ -64,7 +63,7 @@ action propose(b_new:block,b_prev:block,h:height) = {
     require le(block_height(b_prev),h);
     require block_height(b_prev) ~=h;
     var j:block;
-    require just(j,b_prev);
+    require just(b_prev,j);
 
     #create tree
     prev(b_new,b_prev):= true;
@@ -88,7 +87,7 @@ action vote(n:node, h:height, b:block) = {
 
     var j:block;
     var jj:block;
-    require just(j,b) & just(jj,j);
+    require just(b,j) & just(j,jj);
     #RULE 2
     require is_good(n) -> ancestor(lock(n),b) | (le(block_height(lock(n)), block_height(j))
                                                 & block_height(lock(n)) ~= block_height(j));
