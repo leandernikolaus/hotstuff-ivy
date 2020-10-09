@@ -95,32 +95,23 @@ isolate hotstuff = {
     relation certified(B:tree.block)
     definition certified(B) = B=tree.genesis | exists Q. forall N. member(N,Q) -> voted(N,B)
 
-    relation just(B:tree.block, C:tree.block)
-
     #init
     after init {
         voted(N,B) := false;
         lock(N) := tree.genesis;
-        just(B,C) := B = C & B = tree.genesis;
     }
 
     action propose(b_new:tree.block,b_prev:tree.block,h:heights.t,j:tree.block) = {
-        require just(b_prev,j);
+        require certified(b_prev);
+        require tree.prev(b_prev,j);
 
         #create tree
         call tree.propose(b_new,b_prev,h);
-
-        #mark as proposed and set just
-        if certified(b_prev) {
-            just(b_new,b_prev) := true;
-        } else {
-            just(b_new,j) := true;
-        }
     }
 
     action vote(n:node, h:heights.t, b:tree.block, j:tree.block, jj:tree.block) = {
         require tree.proposed(b);
-        require just(b,j) & just(j,jj);
+        require tree.prev(b,j) & tree.prev(j,jj);
         
         #RULE 1 good nodes will only vote for b if they have not yet voted at larger height
         require is_good(n) & voted(n,B) -> tree.block_height(B) < tree.block_height(b);
@@ -139,7 +130,7 @@ isolate hotstuff = {
     export vote
 
     relation confirm(B:tree.block,C:tree.block,D:tree.block)
-    definition confirm(B,C,D) = tree.prev(C,B) & just(C,B) & tree.prev(D,C) & just(D,C) & certified(D)
+    definition confirm(B,C,D) = tree.prev(C,B) & tree.prev(D,C) & certified(D)
 
 
     private {
@@ -161,11 +152,8 @@ isolate hotstuff = {
         
         invariant lock(N) = B -> certified(B)
         invariant voted(N,B) -> tree.proposed(B)
-        invariant voted(N,B) & just(B,J) & just(J,JJ) -> lock(N) = JJ | tree.block_height(JJ) < tree.block_height(lock(N)) 
-        invariant just(B,C) -> certified(C)
-        invariant just(tree.genesis, tree.genesis)
-        invariant just(B,C) & just(C,B) -> B = tree.genesis 
-        invariant just(B,C) & B ~= C -> tree.block_height(C) < tree.block_height(B)
+        invariant voted(N,B) & tree.prev(B,J) & tree.prev(J,JJ) -> lock(N) = JJ | tree.block_height(JJ) < tree.block_height(lock(N)) 
+        invariant tree.prev(B,C) -> certified(C)
         
         invariant confirm(B,C,D) & certified(E) & tree.block_height(B) < tree.block_height(E) -> tree.ancestor(B,E)
     }
