@@ -43,8 +43,8 @@ I started of by adding lots of simple invariants to rule out unrelated counterex
 
 Mostly I found working with Ivy great. 
 However in some cases it seems to run forever, i.e. hours. I believe this is what is refered to in the community as the SMT solver diverging.
-In these cases, I usually came up with a counterexample to inductivity myself and changed the model.
+In these cases, I usually came up with a counterexample to inductivity myself and changed the model. Using the `marco_finder=false` speeded up the process only in some cases.
 
-Verifying the complet proof currently takes about 13 minutes, what is ok, but significantly more than what I was expecting based on the papers, where proof times of less then 10 seconds are reported [PoPL`17](https://dl.acm.org/doi/abs/10.1145/3140568).
+Initially, verifying the complet proof currently took about 13 minutes, what is ok, but significantly more than what I was expecting based on the papers, where proof times of less then 10 seconds are reported [PoPL`17](https://dl.acm.org/doi/abs/10.1145/3140568).
 
-
+I managed to reduce the proof time to around 1 minutes by using invariants from the `tree` isolate as specification, rather than proving them again.

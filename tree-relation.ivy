@@ -43,7 +43,7 @@ isolate tree = {
     action propose(b_new:block,b_prev:block,h:heights.t) = {
         #these are assume, not require, to avoid repeting them in hotstuff
         assume ~proposed(b_new);
-        assume proposed(b_prev);
+        require proposed(b_prev);
         assume block_height(b_prev) < h;
 
         #create tree
@@ -58,21 +58,28 @@ isolate tree = {
 
     #export propose
 
-    private {
-        invariant prev(B,C) & prev(B,D) -> C=D
-        invariant prev(B,C) & prev(C,B) -> C=genesis
+    specification {
         invariant prev(genesis,genesis)
-        invariant ~proposed(B) -> ~prev(B,C)
-        invariant proposed(B) & prev(B,C) -> proposed(C)
-        invariant proposed(B) -> ancestor(genesis,B)
-        #invariant proposed(B) -> exists D. prev(B,D)
-        #invariant prev(B,C) -> exists D. prev(B,D)
         invariant prev(B,C) -> ancestor(C,B)
+        invariant prev(D,C) & ancestor(B,C) -> ancestor(B,D)
+        invariant ~proposed(B) -> ~prev(B,C)
+        invariant ~proposed(B) -> block_height(B) = heights.min
+        invariant prev(B,C) & prev(B,D) -> C=D
+        invariant prev(B,C) & prev(C,B) -> C=tree.genesis
+        invariant prev(B,C) & B ~= C -> block_height(C) < block_height(B)
+        invariant prev(B,C) -> proposed(C)
+        invariant proposed(B) -> ancestor(genesis,B)
+        invariant prev(B,C) -> ancestor(C,B)
+        invariant ancestor(B,C) & B ~= C -> block_height(B) < block_height(C)
         invariant ancestor(B,C) & ~proposed(B) -> B=C
+        invariant ancestor(B,B)
         invariant ancestor(B,C) & ancestor(C,B) -> B=C
         invariant ancestor(B,C) & ancestor(C,D) -> ancestor(B,D)
-        invariant prev(C,B) -> ancestor(B,C)
-        invariant prev(D,C) & ancestor(B,C) -> ancestor(B,D)
+        invariant ancestor(B,D) & ancestor(C,D) -> ancestor(B,C) | ancestor(C,B)
+        invariant ancestor(B,D) & ancestor(C,D) &  ancestor(B,C) & B ~= C & C ~= D -> ~prev(D,B)
+
+        #invariant proposed(B) -> exists D. prev(B,D)
+        #invariant prev(B,C) -> exists D. prev(B,D)
         #invariant ancestor(B,C) & B~=C -> exists D. prev(C,D) & ancestor(B,D)
     }
 
@@ -113,10 +120,9 @@ isolate hotstuff = {
         votedh(N,H) := H = heights.min;
     }
 
-    action propose(b_new:tree.block,b_prev:tree.block,h:heights.t,j:tree.block) = {
+    action propose(b_new:tree.block,b_prev:tree.block,h:heights.t) = {
         require certified(b_prev);
-        require tree.prev(b_prev,j);
-
+        
         #create tree
         call tree.propose(b_new,b_prev,h);
     }
@@ -154,26 +160,6 @@ isolate hotstuff = {
 
 
     private {
-        #invariants specifying that the tree structure is correct.
-        invariant tree.prev(tree.genesis,tree.genesis)
-        invariant tree.prev(C,B) -> tree.ancestor(B,C)
-        invariant tree.prev(D,C) & tree.ancestor(B,C) -> tree.ancestor(B,D)
-        invariant ~tree.proposed(B) -> ~tree.prev(B,C)
-        invariant ~tree.proposed(B) -> tree.block_height(B) = heights.min
-        invariant tree.prev(B,C) & tree.prev(B,D) -> C=D
-        invariant tree.prev(B,C) & tree.prev(C,B) -> C=tree.genesis
-        invariant tree.prev(B,C) & B ~= C -> tree.block_height(C) < tree.block_height(B)
-        invariant tree.proposed(B) & tree.prev(B,C) -> tree.proposed(C)
-        invariant tree.proposed(B) -> tree.ancestor(tree.genesis,B)
-        invariant tree.prev(B,C) -> tree.ancestor(C,B)
-        invariant tree.ancestor(B,C) & B ~= C -> tree.block_height(B) < tree.block_height(C)
-        invariant tree.ancestor(B,C) & ~tree.proposed(B) -> B=C
-        invariant tree.ancestor(B,B)
-        invariant tree.ancestor(B,C) & tree.ancestor(C,B) -> B=C
-        invariant tree.ancestor(B,C) & tree.ancestor(C,D) -> tree.ancestor(B,D)
-        invariant tree.ancestor(B,D) & tree.ancestor(C,D) -> tree.ancestor(B,C) | tree.ancestor(C,B)
-        invariant tree.ancestor(B,D) & tree.ancestor(C,D) &  tree.ancestor(B,C) & B ~= C & C ~= D -> ~tree.prev(D,B)
-
         invariant lock(N,B) -> certified(B)
         # saying, there exists a quorum, where everyone voted created a quantifier alternation circle, therefore
         invariant certified(B) -> forall Q. exists N. member(N,Q) & is_good(N) & voted(N,B)
@@ -182,8 +168,8 @@ isolate hotstuff = {
         invariant voted(N,B) & voted(N,C) & B ~= C & is_good(N) -> tree.block_height(B) ~= tree.block_height(C)
         invariant voted(N,B) & tree.prev(B,J) & tree.prev(J,JJ) & lock(N,L) -> tree.block_height(JJ) <= tree.block_height(L) 
         invariant tree.prev(B,C) -> certified(C)
-        #invariant is_good(N) & lock(N,B) -> tree.block_height(B) <= max(N)
-        #invariant is_good(N) & lock(N,B) & tree.block_height(B) = max(N) -> B = tree.genesis
+        invariant is_good(N) & lock(N,B) -> tree.block_height(B) <= max(N)
+        invariant is_good(N) & lock(N,B) & tree.block_height(B) = max(N) -> B = tree.genesis
         
         invariant voted(N,B) & voted(N,C) & B ~=C & is_good(N) -> tree.block_height(B) ~= tree.block_height(C)
         invariant certified(B) & certified(C) & B ~=C -> tree.block_height(B) ~= tree.block_height(C)
@@ -202,10 +188,13 @@ isolate hotstuff = {
         invariant confirm(B,C,D) & certified(F) & ~tree.ancestor(B,F) & tree.block_height(D) <= tree.block_height(F) -> 
                 exists H. exists N. tree.block_height(D) <= H & is_good(N) & member(N,Q) & votedh(N,H) & ~votedb(N,B,H) & ~voted(N,D)
         
-        
-        
+    }
+
+    specification {
+        #safety property
         invariant confirm(B,C,D) & certified(D) & certified(F) & tree.block_height(B) < tree.block_height(F) -> tree.ancestor(B,F)
     }
 
 
 } with heights, tree
+
