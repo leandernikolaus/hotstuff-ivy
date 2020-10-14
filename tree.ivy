@@ -53,7 +53,7 @@ isolate tree = {
         #mark as proposed
         proposed(b_new) := true;
 
-        ancestor(B,b_new) := ancestor(B,b_prev) | B=b_prev;
+        ancestor(B,b_new) := ancestor(B,b_prev) | B=b_prev | B = b_new;
     }
 
     export propose
@@ -130,7 +130,9 @@ isolate hotstuff = {
     export vote
 
     relation confirm(B:tree.block,C:tree.block,D:tree.block)
-    definition confirm(B,C,D) = tree.prev(C,B) & tree.prev(D,C) & certified(D)
+    definition confirm(B,C,D) = tree.prev(C,B) & tree.prev(D,C) & 
+                                                (forall H. H < tree.block_height(D) -> H = tree.block_height(C) | 
+                                                                                                 H <= tree.block_height(B))
 
 
     private {
@@ -145,22 +147,28 @@ isolate hotstuff = {
         invariant tree.proposed(B) & tree.prev(B,C) -> tree.proposed(C)
         invariant tree.proposed(B) -> tree.ancestor(tree.genesis,B)
         invariant tree.prev(B,C) -> tree.ancestor(C,B)
-        invariant tree.ancestor(B,C) -> tree.block_height(B) <= tree.block_height(C)
+        invariant tree.ancestor(B,C) & B ~= C -> tree.block_height(B) < tree.block_height(C)
         invariant tree.ancestor(B,C) & ~tree.proposed(B) -> B=C
+        invariant tree.ancestor(B,B)
         invariant tree.ancestor(B,C) & tree.ancestor(C,B) -> B=C
         invariant tree.ancestor(B,C) & tree.ancestor(C,D) -> tree.ancestor(B,D)
+        invariant tree.ancestor(B,D) & tree.ancestor(C,D) -> tree.ancestor(B,C) | tree.ancestor(C,B)
         
         invariant lock(N) = B -> certified(B)
+        # saying, there exists a quorum, where everyone voted created a quantifier alternation circle, therefore
         invariant voted(N,B) -> tree.proposed(B)
-        invariant voted(N,B) & tree.prev(B,J) & tree.prev(J,JJ) -> lock(N) = JJ | tree.block_height(JJ) < tree.block_height(lock(N)) 
+        invariant voted(N,B) & tree.prev(B,J) & tree.prev(J,JJ) -> lock(N) = JJ | tree.block_height(JJ) <= tree.block_height(lock(N)) 
         invariant tree.prev(B,C) -> certified(C)
-        
-        invariant confirm(B,C,D) & certified(E) & tree.block_height(B) < tree.block_height(E) -> tree.ancestor(B,E)
+
+        invariant voted(N,B) & voted(N,C) & B ~=C & is_good(N) -> tree.block_height(B) ~= tree.block_height(C)
+        invariant certified(B) & certified(C) & B ~=C -> tree.block_height(B) ~= tree.block_height(C)
+
+        invariant confirm(B,C,D) & voted(N,D) & is_good(N) & 
+                tree.prev(F,E) & voted(N,F) & ~tree.ancestor(B,F) & tree.block_height(D) < tree.block_height(F) -> tree.block_height(D) < tree.block_height(E)
+
+        invariant confirm(B,C,D) & voted(N,E) & voted(N,D) & is_good(N) & tree.block_height(D) < tree.block_height(E) -> tree.ancestor(B,E)
+        invariant confirm(B,C,D)  & certified(D) & certified(E) & tree.block_height(B) < tree.block_height(E) -> tree.ancestor(B,E)
     }
 
 
 } with heights, tree
-
-
-
-
