@@ -1,0 +1,104 @@
+#lang ivy1.7
+
+include collections
+include order
+
+isolate tree_spec = {
+    type block
+
+    individual genesis:block
+
+    action add(b: block, p: block) returns (ok:bool)
+    action prev(b: block) returns (p: block)
+    action anc(b: block, c: block) returns (ok:bool)
+
+    specification {
+        relation previous(B:block, P:block)
+        relation added(B:block)
+        relation ancestor(B:block, P:block)
+        after init {
+            previous(B,P) := B = genesis & P = genesis;
+            added(B) := B = genesis;
+            ancestor(B,P) := B = P;
+        }
+        after add {
+            ensure ok <-> added(p) & ~added(b);
+            if ok {
+                previous(b,p) := true;
+                added(b) := true;
+                ancestor(B,b) := ancestor(B,p) | B = b;
+            }
+        }
+        after prev {
+            ensure (added(b) & previous(b,p)) | (~added(b) & p = genesis);
+        }
+        after anc {
+            ensure ok <-> ancestor(b,c)
+        }
+
+        invariant previous(genesis, genesis)
+        invariant previous(B,P) -> added(B)
+        invariant ancestor(B,B)
+        invariant ancestor(B,C) & ancestor(C,D) -> ancestor(B,D)
+        #invariant ancestor(B,C) & previous(C,P) -> B = C | ancestor(B,P)
+        
+    }
+
+    implementation {
+        instance h : unbounded_sequence
+        function previousmap(B:block):block
+        relation iadded(B:block)
+        function height(B:block):h
+        after init {
+            previousmap(B) := genesis;
+            iadded(B) := B = genesis;
+            height(B) := 0;
+        }
+
+        implement add {
+            ok := (~iadded(b)) & iadded(p);
+            if ok {
+                height(b) := h.next(height(p));
+                iadded(b) := true;
+                previousmap(b) := p;
+            } 
+        }
+        
+        invariant iadded(B) <-> added(B)
+        implement prev {
+            p := previousmap(b);
+        }
+        invariant previousmap(B) = P & iadded(B) -> previous(B,P)
+        invariant ~iadded(B) -> previousmap(B) = genesis
+        
+
+        implement anc {
+            if ~iadded(c) {
+                ok := b = c;
+            }
+            else {
+                ok := false;
+                var p := c;
+                var i := height(p);
+                while i > height(b)
+                invariant height(b) <= i & i <= height(c)
+                invariant ancestor(B,c) & height(B) = i -> B = p
+                invariant i > height(b) -> height(previousmap(p)) < i
+                {
+                    p := previousmap(p);
+                    ok := p = c;
+                }
+            }
+        }
+
+    }
+
+    export add
+    export prev
+    #export anc
+
+}
+
+isolate tree_imp = {
+
+} with tree_spec
