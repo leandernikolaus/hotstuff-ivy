@@ -3,65 +3,61 @@
 include collections
 include order
 
-isolate tree_spec = {
-    type block
+type block
+
+isolate tree = {
+    
 
     individual genesis:block
 
     action add(b: block, p: block) returns (ok:bool)
+    action isadded(b: block) returns (ok: bool)
     action prev(b: block) returns (p: block)
-    action anc(b: block, c: block) returns (ok:bool)
-
+    
     specification {
         relation previous(B:block, P:block)
         relation added(B:block)
-        relation ancestor(B:block, P:block)
         after init {
             previous(B,P) := B = genesis & P = genesis;
             added(B) := B = genesis;
-            ancestor(B,P) := B = P;
         }
         after add {
             ensure ok <-> added(p) & ~added(b);
             if ok {
                 previous(b,p) := true;
                 added(b) := true;
-                ancestor(B,b) := ancestor(B,p) | B = b;
+                #ancestor(B,b) := ancestor(B,p) | B = b;
             }
+        }
+        after isadded {
+            ensure ok <-> added(b)
         }
         after prev {
             ensure (added(b) & previous(b,p)) | (~added(b) & p = genesis);
         }
-        after anc {
-            ensure ok <-> ancestor(b,c)
-        }
-
+        
         invariant previous(genesis, genesis)
         invariant previous(B,P) -> added(B)
-        invariant ancestor(B,B)
-        invariant ancestor(B,C) & ancestor(C,D) -> ancestor(B,D)
-        #invariant ancestor(B,C) & previous(C,P) -> B = C | ancestor(B,P)
         
     }
 
     implementation {
-        instance h : unbounded_sequence
         function previousmap(B:block):block
         relation iadded(B:block)
-        function height(B:block):h
         after init {
             previousmap(B) := genesis;
             iadded(B) := B = genesis;
-            height(B) := 0;
         }
 
         implement add {
             ok := (~iadded(b)) & iadded(p);
             if ok {
-                height(b) := h.next(height(p));
                 iadded(b) := true;
                 previousmap(b) := p;
             } 
+        }
+        implement isadded {
+            ok := iadded(b);
         }
         
         invariant iadded(B) <-> added(B)
@@ -70,35 +66,88 @@ isolate tree_spec = {
         }
         invariant previousmap(B) = P & iadded(B) -> previous(B,P)
         invariant ~iadded(B) -> previousmap(B) = genesis
+        invariant previous(B,P) -> previousmap(B) = P
         
 
-        implement anc {
-            if ~iadded(c) {
-                ok := b = c;
-            }
-            else {
-                ok := false;
-                var p := c;
-                var i := height(p);
-                while i > height(b)
-                invariant height(b) <= i & i <= height(c)
-                invariant ancestor(B,c) & height(B) = i -> B = p
-                invariant i > height(b) -> height(previousmap(p)) < i
-                {
-                    p := previousmap(p);
-                    ok := p = c;
-                }
-            }
-        }
-
+        
     }
-
     export add
+    export isadded
     export prev
-    #export anc
-
 }
 
-isolate tree_imp = {
+isolate atree = {
+    action anc(b: block, c: block) returns (aok:bool)
+    action add(b: block, p: block) returns (ok:bool)
 
-} with tree_spec
+
+    specification {
+        relation ancestor(B:block,C:block)
+        after init {
+            ancestor(B,P) := B = P;
+        }
+        after add {
+            if ok {
+                ancestor(B,b) := ancestor(B,p) | B = b;
+            }
+        }
+        after anc {
+            ensure aok <-> ancestor(b,c)
+        }
+
+        invariant tree.previous(B,P) -> B = tree.genesis | ~tree.previous(P,B)
+        invariant tree.previous(B,P) & tree.previous(B,PP) -> P = PP
+        invariant tree.previous(B,P) -> tree.added(P)
+        invariant ancestor(B,B)
+        invariant ~tree.added(B) & ancestor(B,P) -> B = P
+        invariant ancestor(P,B) & P ~= B -> tree.added(P) & tree.added(B)
+        invariant tree.previous(B,P) -> ancestor(P,B)
+        invariant ancestor(B,C) & ancestor(C,D) -> ancestor(B,D)
+        invariant tree.previous(B,P) -> ancestor(P,B)
+        invariant ancestor(B,C) & ancestor(C,B) -> B = C
+        invariant ancestor(B,C) & tree.previous(C,P) & B ~= C -> ancestor(B,P)
+        
+    }
+    implementation {
+        instantiate height: unbounded_sequence
+        function h(B:block):height
+        after init {
+            h(B) := 0;
+        }
+        implement add {
+            ok := tree.add(b,p);
+            if ok {
+                h(b) := h(p).next();
+            }
+        }
+        
+        invariant ancestor(P,B) & B ~= P -> h(P) < h(B)
+        invariant h(tree.genesis) = 0
+        
+        implement anc {
+            aok := b = c;
+            if tree.isadded(c) & h(b) < h(c) {
+                var p := c;
+                var i := h(c);
+                while i > h(b)
+                    invariant 0 <= i & i <= h(c)
+                    invariant i = h(p)
+                    invariant tree.previous(p,tree.prev(p))
+                    invariant i > h(b) -> h(tree.prev(p)) < i
+                    invariant ancestor(p,c)
+                    invariant ancestor(b,c) -> ancestor(b,p)
+                    invariant aok <-> p = b
+                {
+                    p := tree.prev(p);
+                    i := h(p);
+                    aok := p = b; # this should be outside of the loop, but somehow that gives an errlr
+                }   
+            }
+        }
+    }
+
+    export anc
+    export add
+
+
+} with tree
