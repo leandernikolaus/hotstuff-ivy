@@ -1,0 +1,239 @@
+#lang ivy1.7
+
+#TODO: Model certificates
+
+module total_order(t) = {
+    property [Transitivity] X:t < Y & Y < Z -> X < Z  
+    property [antisymmetry] ~(X:t < Y & Y < X)
+    property [totality] X:t < Y | X=Y | Y < X
+}
+
+isolate heights = {
+    type t
+    individual min:t
+
+    specification {
+        instantiate total_order(t)
+        property [minimum] min < H | min = H
+    }
+}
+
+isolate tree = {
+    type block
+
+    individual genesis:block
+
+    #assign to every block its block height
+    function block_height(B:block):heights.t
+    #assign to every block a predecessor
+    relation prev(B:block,C:block)
+    relation proposed(B:block)
+
+    relation ancestor(B:block, C:block)
+
+    #init
+    after init {
+        prev(B,C) := false;
+        prev(genesis,genesis) := true;
+        proposed(B) := B = genesis;
+        block_height(B) := heights.min;
+        ancestor(B,C) := B=C;
+    }
+
+    action propose(b_new:block,b_prev:block,h:heights.t) = {
+        #these are assume, not require, to avoid repeting them in hotstuff
+        require ~proposed(b_new);
+        require proposed(b_prev);
+        require block_height(b_prev) < h;
+
+        #create tree
+        prev(b_new,b_prev) := true;
+        block_height(b_new) := h;
+
+        #mark as proposed
+        proposed(b_new) := true;
+
+        ancestor(B,b_new) := ancestor(B,b_prev) | B=b_prev | B = b_new;
+    }
+
+    #export propose
+
+    specification {
+        invariant prev(genesis,genesis)
+        invariant prev(B,C) -> ancestor(C,B)
+        invariant prev(D,C) & ancestor(B,C) -> ancestor(B,D)
+        invariant ~proposed(B) -> ~prev(B,C)
+        invariant ~proposed(B) -> block_height(B) = heights.min
+        invariant prev(B,C) & prev(B,D) -> C=D
+        invariant prev(B,C) & prev(C,B) -> C=tree.genesis
+        invariant prev(B,C) & B ~= C -> block_height(C) < block_height(B)
+        invariant prev(B,C) -> proposed(C)
+        invariant proposed(B) -> ancestor(genesis,B)
+        invariant prev(B,C) -> ancestor(C,B)
+        invariant ancestor(B,C) & B ~= C -> block_height(B) < block_height(C)
+        invariant ancestor(B,C) & ~proposed(B) -> B=C
+        invariant ancestor(B,B)
+        invariant ancestor(B,C) & ancestor(C,B) -> B=C
+        invariant ancestor(B,C) & ancestor(C,D) -> ancestor(B,D)
+        invariant ancestor(B,D) & ancestor(C,D) -> ancestor(B,C) | ancestor(C,B)
+        invariant ancestor(B,D) & ancestor(C,D) &  ancestor(B,C) & B ~= C & C ~= D -> ~prev(D,B)
+
+        #invariant proposed(B) -> exists D. prev(B,D)
+        #invariant prev(B,C) -> exists D. prev(B,D)
+        #invariant ancestor(B,C) & B~=C -> exists D. prev(C,D) & ancestor(B,D)
+    }
+
+} with heights
+
+isolate base = {
+    type node
+    type quorum
+
+    relation member(N:node, Q:quorum)
+
+    relation is_good(N:node) # should be used only in the proof!
+    axiom forall Q. exists N. is_good(N) & member(N,Q)
+    axiom forall Q1,Q2. exists N. is_good(N) & member(N, Q1) & member(N, Q2)
+
+
+    #this shows that node N signed block B at height H
+    relation voted(N:node,B:tree.block)
+
+    function max(N:node):heights.t
+
+    relation certified(B:tree.block)
+    definition certified(B) = B=tree.genesis | exists Q. forall N. member(N,Q) -> voted(N,B)
+
+    relation confirm(B:tree.block,C:tree.block,D:tree.block)
+    definition confirm(B,C,D) = tree.prev(C,B) & tree.prev(D,C) & 
+                                (forall H. H < tree.block_height(D) -> H = tree.block_height(C) | 
+                                                                       H <= tree.block_height(B))
+
+    
+    #init
+    after init {
+        voted(N,B) := B = tree.genesis;
+        max(N) := heights.min;
+    } 
+
+    action propose(b_new:tree.block,b_prev:tree.block,h:heights.t) = {
+        require ~tree.proposed(b_new);
+        require tree.block_height(b_prev) < h;
+        require certified(b_prev);
+        
+        #create tree
+        call tree.propose(b_new,b_prev,h);
+    }
+
+    action vote(n:node, b:tree.block) = {
+        require tree.proposed(b);
+        require ~is_good(n) | max(n) < tree.block_height(b);
+
+        voted(n,b) := true;
+        max(n) := tree.block_height(b);
+    }
+    
+
+    #export propose
+    #export vote
+
+    specification {
+        invariant certified(B) -> forall Q. exists N. member(N,Q) & is_good(N) & voted(N,B)
+        invariant voted(N,B) -> tree.proposed(B)
+        invariant voted(N,B) & is_good(N) -> tree.block_height(B) <= max(N)
+        invariant voted(N,B) & voted(N,C) & B ~= C & is_good(N) -> tree.block_height(B) ~= tree.block_height(C)
+        invariant tree.prev(B,C) -> certified(C)
+        invariant certified(B) & certified(C) & B ~=C -> tree.block_height(B) ~= tree.block_height(C)
+    }
+
+} with heights, tree
+
+
+isolate hotstuff_proof = {
+    
+    #assign for every node its lock
+    relation lock(N:base.node, B:tree.block)
+
+    #this relation was added for the proof.
+    #it describes that node N voted for an ancestor of B at height H.
+    relation votedb(N:base.node,B:tree.block, H:heights.t)
+    #this relation was added for the proof.
+    #it describes that node N voted for a block at height H.
+    relation votedh(N:base.node, H:heights.t)
+
+    
+    #init
+    after init {
+        lock(N,B) := B = tree.genesis;
+        votedb(N,B,H) := B = tree.genesis & H = heights.min;
+        votedh(N,H) := H = heights.min;
+    }
+
+    action propose(b_new:tree.block,b_prev:tree.block,h:heights.t) = {
+        require ~tree.proposed(b_new);
+        require tree.block_height(b_prev) < h;
+        require base.certified(b_prev);
+        
+        #create tree
+        call base.propose(b_new,b_prev,h);
+    }
+
+    action vote(n:base.node, b:tree.block, j:tree.block, jj:tree.block, l:tree.block) = {
+        require tree.proposed(b);
+        require tree.prev(b,j) & tree.prev(j,jj);
+        require lock(n,l);
+        
+        #RULE 1 good nodes will only vote for b if they have not yet voted at larger height
+        #require base.is_good(n) & base.voted(n,B) -> tree.block_height(B) < tree.block_height(b);
+        require ~base.is_good(n) | base.max(N) < tree.block_height(b);
+
+        #RULE 2
+        require base.is_good(n) & lock(n,l) -> tree.ancestor(l,b) | tree.block_height(l) < tree.block_height(j);
+
+        
+        if tree.block_height(l) < tree.block_height(jj) {
+            lock(n,B) := B = jj;
+        };
+
+        votedb(n,B,tree.block_height(b)):= votedb(n,B,tree.block_height(b)) | tree.ancestor(B,b); 
+        votedh(n,tree.block_height(b)) := true; 
+
+        call base.vote(n,b);
+    }
+
+    export propose
+    export vote
+
+
+    private {
+        invariant lock(N,B) -> base.certified(B)
+        # saying, there exists a quorum, where everyone voted created a quantifier alternation circle, therefore
+        invariant lock(N,B) & lock(N,C) -> C = B
+        invariant base.voted(N,B) & tree.prev(B,J) & tree.prev(J,JJ) & lock(N,L) -> tree.block_height(JJ) <= tree.block_height(L) 
+        invariant base.is_good(N) & lock(N,B) -> tree.block_height(B) <= base.max(N)
+        invariant base.is_good(N) & lock(N,B) & tree.block_height(B) = base.max(N) -> B = tree.genesis
+        
+        
+        invariant base.voted(N,B) -> votedh(N,tree.block_height(B))
+        invariant base.voted(N,C) & tree.ancestor(B,C) -> votedb(N,B,tree.block_height(C))
+        invariant votedb(N,B,H) & base.voted(N,C) & tree.block_height(C) = H & base.is_good(N) -> tree.ancestor(B,C)
+        invariant votedb(N,B,H) -> votedh(N,H)
+        invariant votedh(N,H) & base.is_good(N) -> H <= base.max(N)
+    
+        #not sure if there is a counterexample that is eliminated by this invariant. But without this, ivy runs for an hour without result.
+        invariant base.confirm(B,C,D) & base.voted(N,D) & base.is_good(N) & 
+                tree.prev(F,E) & base.voted(N,F) & ~tree.ancestor(B,F) & tree.block_height(D) < tree.block_height(F) 
+                -> tree.block_height(D) <= tree.block_height(E)
+
+        invariant base.confirm(B,C,D) & base.certified(F) & ~tree.ancestor(B,F) & tree.block_height(D) <= tree.block_height(F) -> 
+                exists H. exists N. tree.block_height(D) <= H & base.is_good(N) & base.member(N,Q) & votedh(N,H) & ~votedb(N,B,H) & ~base.voted(N,D)
+        #invariant ~(base.voted(N,B) & B ~= tree.genesis)
+    }
+
+    specification {
+        #safety property
+        invariant base.confirm(B,C,D) & base.certified(D) & base.certified(F) & tree.block_height(B) < tree.block_height(F) -> tree.ancestor(B,F)
+    }
+
+
+} with heights, tree, base
