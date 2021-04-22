@@ -12,7 +12,9 @@ The repository contains the following files:
 
 * [hotstuff_base](hotstuff_base.ivy) contains the model of the hotstuff algorithm.
 * [hotstuff_simple](hotstuff_simple.ivy) extends the hotstuff model with additional predicates and proofs safety.
-Previous version of the model can still be found in the *ivy* branch.
+
+The *ivy* branch also contains a preliminary version of the proof for which ivy runs extremly long (`tree.ivy`), 
+and first tries towards implementing the tree (`tree-imp.ivy`).
 
 ### Isolates
 

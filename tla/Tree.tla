@@ -287,10 +287,16 @@ THEOREM Anc4 ==  /\ RType
     BY <1>0, <1>1, NatInduction
   <1> QED
     BY <1>2 DEF ok  
-  
+    
+(***************************************************************************)
+(* We where unable to prove primed variants of the corollaries above, e.g. *)
+(* COROLLARY Anc2p == PType' => \A b \in Blocks: Ancestor(parent[b],b)'    *)
+(*   BY Anc2                                                               *)
+(***************************************************************************)
+
   
 
 =============================================================================
 \* Modification History
-\* Last modified Tue Mar 02 18:06:40 CET 2021 by leanderjehl
+\* Last modified Thu Apr 22 15:15:53 CEST 2021 by leanderjehl
 \* Created Wed Nov 11 13:24:33 CET 2020 by leanderjehl
