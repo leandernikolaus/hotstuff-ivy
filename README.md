@@ -1,3 +1,5 @@
+[![DOI](https://zenodo.org/badge/299863250.svg)](https://zenodo.org/badge/latestdoi/299863250)
+
 # Verifying Simplified Hotstuff 
 This repository includes safety proof for the simplified HotStuff protocol.
 Proofs are done using both TLAPS and Ivy tool.
