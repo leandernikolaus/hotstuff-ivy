@@ -16,8 +16,8 @@ isolate hotstuffs_proof = {
     
     #init
     after init {
-        votedb(N,B,H) := B = tree.genesis & H = heights.min;
-        votedh(N,H) := H = heights.min;
+        votedb(N,B,H) := B = tree.genesis & H = 0;
+        votedh(N,H) := H = 0;
     }
 
     action propose(b_new:tree.block,b_prev:tree.block,h:heights.t) = {

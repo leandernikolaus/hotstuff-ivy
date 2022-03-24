@@ -10,11 +10,14 @@ module total_order(t) = {
 
 isolate heights = {
     type t
-    individual min:t
+    # individual min:t
 
     specification {
         instantiate total_order(t)
-        property [minimum] min < H | min = H
+        property [minimum] 0 < H:t | 0 = H:t
+    }
+    implementation {
+        interpret t -> nat
     }
 }
 
@@ -36,7 +39,7 @@ isolate tree = {
         prev(B,C) := false;
         prev(genesis,genesis) := true;
         proposed(B) := B = genesis;
-        block_height(B) := heights.min;
+        block_height(B) := 0;
         ancestor(B,C) := B=C;
     }
 
@@ -63,7 +66,7 @@ isolate tree = {
         invariant prev(B,C) -> ancestor(C,B)
         invariant prev(D,C) & ancestor(B,C) -> ancestor(B,D)
         invariant ~proposed(B) -> ~prev(B,C)
-        invariant ~proposed(B) -> block_height(B) = heights.min
+        invariant ~proposed(B) -> block_height(B) = 0
         invariant prev(B,C) & prev(B,D) -> C=D
         invariant prev(B,C) & prev(C,B) -> C=tree.genesis
         invariant prev(B,C) & B ~= C -> block_height(C) < block_height(B)
@@ -114,8 +117,8 @@ isolate base = {
     #init
     after init {
         voted(N,B) := B = tree.genesis;
-        max(N) := heights.min;
-        lock(N) := heights.min;
+        max(N) := 0;
+        lock(N) := 0;
     } 
 
     action propose(b_new:tree.block,b_prev:tree.block,h:heights.t) = {
