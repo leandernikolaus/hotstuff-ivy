@@ -1,0 +1,90 @@
+#lang ivy1.7
+
+include hotstuff_proof
+
+isolate hotstuff_global = {
+    # this isolate still operates on the global tree, as hotstuff_proof, but omits all the helper relations.
+
+
+    #this shows that node N signed block B at height H
+    relation voted(N:base.node,B:tree.block)
+
+    function max(N:base.node):heights.t
+    function lock(N:base.node):heights.t
+
+    relation certified(B:tree.block)
+    definition certified(B) = B=tree.genesis | exists Q. forall N. base.member(N,Q) -> voted(N,B)
+
+    relation committed(B:tree.block)
+
+    #init
+    after init {
+        voted(N,B) := B = tree.genesis;
+        max(N) := 0;
+        lock(N) := 0;
+        committed(B) := B = tree.genesis;
+    }
+
+    
+
+    action propose(b_new:tree.block,b_prev:tree.block,h:heights.t) = {
+        require ~tree.proposed(b_new);
+        require tree.block_height(b_prev) < h;
+        require certified(b_prev);
+        
+        #create tree
+        call hotstuff_proof.propose(b_new,b_prev,h);
+    }
+
+    action vote(n:base.node, b:tree.block, p:tree.block, gp:tree.block, ggp:tree.block) = {
+        require tree.proposed(b);
+        require tree.prev(b,p) & tree.prev(p,gp) & tree.prev(gp,ggp);
+
+        #RULE 1 only applies to good nodes
+        require ~base.is_good(n) | max(n) < tree.block_height(b);
+
+        #RULE 2s simplified rule
+        require base.is_good(n) -> lock(n) <= tree.block_height(gp);
+
+
+        if lock(n) < tree.block_height(gp) {
+            lock(n) := tree.block_height(gp);
+        };
+
+        voted(n,b) := true;
+        max(n) := tree.block_height(b);
+
+        if heights.succ(tree.block_height(p),tree.block_height(gp)) & heights.succ(tree.block_height(gp),tree.block_height(ggp)) {
+            committed(ggp) := true;
+        };
+
+        call hotstuff_proof.vote(n,b,p,gp,ggp);
+    }
+    
+    export propose
+    export vote
+
+    private {
+        invariant committed(B) <-> hotstuff_proof.committed(B)
+        invariant voted(N,B) <-> hotstuff_proof.voted(N,B)
+        invariant max(N) = hotstuff_proof.max(N)
+        invariant lock(N) = hotstuff_proof.lock(N)
+    }
+
+    specification {
+        invariant committed(B) & committed(C)  -> tree.ancestor(B,C) | tree.ancestor(C,B)
+        # invariant voted(N,B) & tree.prev(B,J) & tree.prev(J,JJ) -> tree.block_height(JJ) <= lock(N) 
+        #invariant base.is_good(N) & lock(N,B) -> tree.block_height(B) <= base.max(N)
+        #invariant base.is_good(N) & lock(N,B) & tree.block_height(B) = base.max(N) -> B = tree.genesis
+        
+
+
+        #invariant certified(B) -> forall Q. exists N. member(N,Q) & is_good(N) & voted(N,B)
+        # invariant voted(N,B) -> tree.proposed(B)
+        # invariant voted(N,B) & is_good(N) -> tree.block_height(B) <= max(N)
+        # invariant voted(N,B) & voted(N,C) & B ~= C & is_good(N) -> tree.block_height(B) ~= tree.block_height(C)
+        # invariant tree.prev(B,C) -> certified(C)
+        # invariant certified(B) & certified(C) & B ~=C -> tree.block_height(B) ~= tree.block_height(C)
+    }
+
+} with heights, tree, base, hotstuff_proof
