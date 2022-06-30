@@ -1,0 +1,119 @@
+#lang ivy1.7
+
+# include collections
+include hash
+
+isolate tree = {
+    type blockid
+    type data
+
+    individual genesis:blockid
+    individual empty:data
+
+    action add(b: blockid, p: blockid, d: data) returns (ok:bool)
+    action isadded(b: blockid) returns (ok: bool)
+    action prev(b: blockid) returns (p: blockid)
+    action get_data(b: blockid) returns (d: data)
+    
+    specification {
+
+        relation previous(B:blockid, P:blockid)
+        relation added(B:blockid)
+        relation blockdata(B:blockid, D:data)
+        after init {
+            previous(B,P) := B = genesis & P = genesis;
+            added(B) := B = genesis;
+            blockdata(B,D) := (D = empty);
+        }
+        after add {
+            ensure ok <-> added(p) & ~added(b);
+            if ok {
+                previous(b,p) := true;
+                added(b) := true;
+                blockdata(b,D) := (D = d);
+
+                #ancestor(B,b) := ancestor(B,p) | B = b;
+            }
+        }
+        after isadded {
+            ensure ok <-> added(b)
+        }
+        after prev {
+            ensure (added(b) & previous(b,p)) | (~added(b) & p = genesis);
+        }
+
+        after get_data {
+            ensure blockdata(b,d) | (~added(b) & d = empty)
+        }
+
+        invariant (blockdata(B,D) & blockdata(B,C)) -> (C = D)
+        invariant blockdata(genesis, empty)
+        invariant previous(genesis, genesis)
+        invariant previous(B,P) -> added(B)
+        
+    }
+
+    implementation {
+        type block = struct {
+            b_data: data,
+            b_prev: blockid
+        }
+
+        
+
+        instance treemap:hash_map(blockid,block)
+        #destructor repr(H: this) : treemap.t  #this is from the raft example for making the stuff below less verbous
+
+        individual tree:treemap
+
+        after init {
+            #genesis := "gen";
+            # empty := "";
+            var gen_block: block;
+            b_data(gen_block) := empty;
+            b_prev(gen_block) := genesis;
+            tree := treemap.set(treemap.empty,genesis, gen_block);
+        }
+
+        implement add {
+            ok := (treemap.mem(tree,p)) & ~treemap.mem(tree,b);
+            if ok {
+                var new_block: block;
+                b_data(new_block) := d;
+                b_prev(new_block) := p;
+                tree := treemap.set(tree,b,new_block)
+            }
+        }
+
+        implement isadded {
+            ok := treemap.mem(tree,b) | b = genesis;
+        }
+
+        implement prev {
+            p := genesis;
+            if treemap.mem(tree,b) {
+                var b_block: block;
+                b_block := treemap.get(tree, b, b_block);
+                p := b_prev(b_block);
+            }
+        }
+
+        implement get_data {
+            d := empty;
+            if treemap.mem(tree,b) {
+                var b_block: block;
+                b_block := treemap.get(tree, b, b_block);
+                d := b_data(b_block);
+            }
+        }
+
+        invariant treemap.present(tree,B)  <-> (added(B))
+        invariant b_prev(treemap.value(tree,B)) = P & treemap.present(tree,B) <-> (previous(B,P) & added(B))
+        invariant b_data(treemap.value(tree,B)) = D & treemap.present(tree,B) -> (blockdata(B,D) & added(B))
+    }
+
+    export add
+    export isadded
+    export prev
+    export get_data
+}
