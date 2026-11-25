@@ -5,7 +5,7 @@
 include order
 
 module total_order(t) = {
-    property [Transitivity] X:t < Y & Y < Z -> X < Z  
+    property [transitivity] X:t < Y & Y < Z -> X < Z  
     property [antisymmetry] ~(X:t < Y & Y < X)
     property [totality] X:t < Y | X=Y | Y < X
 }

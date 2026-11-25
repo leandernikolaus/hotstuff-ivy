@@ -44,7 +44,7 @@ isolate hotstuff_global = {
         require ~base.is_good(n) | max(n) < tree.block_height(b);
 
         #RULE 2s simplified rule
-        require base.is_good(n) -> lock(n) <= tree.block_height(gp);
+        require base.is_good(n) -> lock(n) <= tree.block_height(p);
 
 
         if lock(n) < tree.block_height(gp) {
@@ -54,7 +54,7 @@ isolate hotstuff_global = {
         voted(n,b) := true;
         max(n) := tree.block_height(b);
 
-        if heights.succ(tree.block_height(p),tree.block_height(gp)) & heights.succ(tree.block_height(gp),tree.block_height(ggp)) {
+        if heights.succ(tree.block_height(gp),tree.block_height(p)) & heights.succ(tree.block_height(ggp),tree.block_height(gp)) {
             committed(ggp) := true;
         };
 
