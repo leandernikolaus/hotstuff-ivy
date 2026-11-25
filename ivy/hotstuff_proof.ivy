@@ -12,7 +12,7 @@ isolate hotstuff_proof = {
     relation voted(N:base.node,B:tree.block)
 
     #this relation was added for the proof.
-    #it describes that node N voted for an ancestor of B at height H.
+    #it describes that node N voted for a descendant of B at height H.
     relation votedb(N:base.node,B:tree.block, H:heights.t)
     #this relation was added for the proof.
     #it describes that node N voted for a block at height H.
@@ -61,7 +61,7 @@ isolate hotstuff_proof = {
         require ~base.is_good(n) | max(n) < tree.block_height(b);
 
         #RULE 2s simplified rule
-        require base.is_good(n) -> lock(n) <= tree.block_height(jj);
+        require base.is_good(n) -> lock(n) <= tree.block_height(j);
         
         votedb(n,B,tree.block_height(b)):= votedb(n,B,tree.block_height(b)) | tree.ancestor(B,b); 
         votedhh(n,tree.block_height(j),tree.block_height(b)):=  true;
@@ -74,7 +74,7 @@ isolate hotstuff_proof = {
             lock(n) := tree.block_height(jj);
         };
 
-        if heights.succ(tree.block_height(j),tree.block_height(jj)) & heights.succ(tree.block_height(jj),tree.block_height(jjj)) {
+        if heights.succ(tree.block_height(jj),tree.block_height(j)) & heights.succ(tree.block_height(jjj),tree.block_height(jj)) {
             committed(jjj) := true;
         }
     }
